@@ -52,14 +52,14 @@ On macOS, if linking fails, set `SDKROOT` to an SDK that works, e.g.
 
 Outputs:
 
-- `out/transitq2026/`: static, no-JavaScript pages for jefftk.com.
+- `out/transitq2026/`: static pages for jefftk.com (no libraries; the history page's year picker uses a little vanilla JavaScript and the rest works without it).
   - `index.html`: the 2026 map.
-  - `history.html`: 2009–2026.
+  - `history.html`: 2009–2026. "Pick years" draws the change between any two years in the browser from `cmp/` (per-year data, ~400 KB a year at 100m).
   - Map images are 1100px, plus 2200px `-big` versions.
   - `labels.png` is a place-name overlay.
 - `out/fragment.html`: the 2026 map as a fragment to paste into a post.
 - `out/data/`: per-square averages, transit lines, and water outlines that the renderers read.
-- `intermediates/`: small JSON summaries.
+- `intermediates/`: small JSON summaries, and `intermediates/hist/`, the per-year extract the history pages are built from (see `pipeline/histdata.py`). Keep it: rebuilding it means rerunning hours of routing.
 
 The OSM extract is fetched live, so streets (and results) will drift slightly from the published version.
 
@@ -69,7 +69,7 @@ The OSM extract is fetched live, so streets (and results) will drift slightly fr
   - `prep.py`: grid, walking graph, timetables → binary inputs for raptor.
   - `raptor.cpp`: all-pairs travel-time matrices.
   - `build.py`, `render.py`, `gen_static.py`, `gen_fullpage.py`: the 2026 map.
-  - `hist.py`, `hist_render.py`, `hist_page.py`, `change_breakdown.py`, `trips_count.py`, `splice_routes.py`: history.
+  - `hist.py`, `hist_extract.py`, `hist_lines.py`, `histdata.py`, `hist_render.py`, `hist_page.py`, `compare.js`, `change_breakdown.py`, `trips_count.py`, `splice_routes.py`: history.
   - `scale_bus.py`, `counterfactual.py`: rerun schedules at another year's bus speeds.
 - `analysis/`: one-off investigations.
   - Bus speeds, rail headways, station transfer distances, and per-area comparisons.

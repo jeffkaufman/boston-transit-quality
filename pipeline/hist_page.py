@@ -1,7 +1,8 @@
-"""Generate the no-JS history page.
+"""Generate the history page.
 
-Usage: hist_page.py HIST_JSON SERVICE_COUNTS_JSON OUT_DIR
-Writes OUT_DIR/history.html; images from hist_render.py must sit alongside.
+Usage: hist_page.py HIST_DIR SERVICE_COUNTS_JSON OUT_DIR   (HIST_DIR: see histdata.py)
+Writes OUT_DIR/history.html; images from hist_render.py must sit alongside. The page works
+without JavaScript; with it, a compare tool draws any two years (vanilla JS, no libraries).
 """
 import json, os, sys
 from PIL import Image
@@ -10,8 +11,10 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # for reach.py under python -I
 import reach as RCH  # noqa: E402
+import histdata  # noqa: E402
 
-H = json.load(open(sys.argv[1]))
+HD = sys.argv[1]
+H, CURVES = histdata.load(HD)
 SC = json.load(open(sys.argv[2]))
 OUT = sys.argv[3]
 YEARS = sorted(H)
@@ -20,8 +23,7 @@ CF = json.load(open("intermediates/speed_counterfactual.json"))
 GRID_ = json.load(open("intermediates/grid.json"))
 CELL_M = round(GRID_["dlat"] * 111_132.0)
 POP = np.array(GRID_["pop"], float); JOBS = np.array(GRID_["jobs"], float)
-# rush-hour reachable shares per year, from hist.py's kept .m files next to hist.json
-RS = {y: RCH.hist_rush(os.path.dirname(os.path.abspath(sys.argv[1])), y, len(POP)) for y in sorted(H)}
+RS = {y: histdata.cells(HD, y, len(POP)) for y in YEARS}  # per square: rush, day, jobs45, res45
 TH = RCH.TRANSIT_AREA_PCT
 CHANGES = [("change-2009-2026", "2009 → 2026"), ("change-2019-2026", "2019 → 2026")]
 VIEWS = [(c, n) for c, n in CHANGES] + [(f"year-{y}", y) for y in YEARS]
@@ -87,11 +89,7 @@ chart2 = line_chart([("bus", bus, "#8f3410", False), ("rail + ferry", rail, "#5a
                     "MBTA weekday trips starting 7am to 7pm, 2009 to 2026")
 
 # ---- Within reach (rush hour round trip), from reach.py ----
-HWD = os.path.dirname(os.path.abspath(sys.argv[1]))
-CURVE = {}  # year -> (minutes incl. 0, avg resident's % of jobs, avg job's % of residents)
-for y in YEARS:
-    mins, cj, cr = RCH.hist_curve(HWD, y, len(POP))
-    CURVE[y] = (np.r_[0, mins], np.r_[0, (cj * POP).sum(1) / POP.sum()], np.r_[0, (cr * JOBS).sum(1) / JOBS.sum()])
+CURVE = CURVES  # year -> (minutes incl. 0, avg resident's % of jobs, avg job's % of residents)
 
 
 def minutes_to(y, pct, side=1):
@@ -139,15 +137,6 @@ chartK2 = line_chart(mins_series, mlo, mhi, list(range(mlo, mhi + 1, 5 if mhi - 
                      R_=78, fmt="{:.0f}")
 m25 = {y: minutes_to(y, 25) for y in ("2009", "2026")}
 wavg = lambda v, w: float((np.asarray(v) * w).sum() / w.sum())
-TCOL = ((30, "#5a6468", True), (45, "#8f3410", False), (60, "#2a6ebb", True))
-reach_jobs = [(f"{t} min", [wavg(RS[y][f"jobs{t}"], POP) for y in YEARS], c, d) for t, c, d in TCOL]
-reach_res = [(f"{t} min", [wavg(RS[y][f"res{t}"], JOBS) for y in YEARS], c, d) for t, c, d in TCOL]
-top = max(max(v) for _, v, *_ in reach_jobs + reach_res)
-top = int(np.ceil(top / 10) * 10)
-chartR1 = line_chart(reach_jobs, 0, top, list(range(0, top + 1, 10)), "of jobs",
-                     "Average resident's share of the region's jobs within 30, 45, and 60 minutes, 2009 to 2026", fmt="{:.0f}%")
-chartR2 = line_chart(reach_res, 0, top, list(range(0, top + 1, 10)), "of residents",
-                     "Average job's share of the region's residents who can commute to it within 30, 45, and 60 minutes, 2009 to 2026", fmt="{:.0f}%")
 area_res = [POP[np.asarray(RS[y]["jobs45"]) >= TH].sum() / POP.sum() * 100 for y in YEARS]
 area_jobs = [JOBS[np.asarray(RS[y]["res45"]) >= TH].sum() / JOBS.sum() * 100 for y in YEARS]
 alo = int(max(0, (min(area_res + area_jobs) - 5) // 10 * 10))
@@ -228,8 +217,8 @@ chartD = range_chart([(s_["range"], s_) for s_ in CB["miles_from_downtown"]], "M
                      "Median change in rush-hour commute 2009 to 2026 by distance from Park Street", bar=True)
 CL = CB["class"]
 
-sel = ",\n".join(f"#v-{k}:checked ~ aside label[for=v-{k}]" for k, _ in VIEWS)
-foc = ",\n".join(f"#v-{k}:focus-visible ~ aside label[for=v-{k}]" for k, _ in VIEWS)
+sel = ",\n".join(f"#v-{k}:checked ~ aside label[for=v-{k}]" for k, _ in VIEWS + [("custom", "")])
+foc = ",\n".join(f"#v-{k}:focus-visible ~ aside label[for=v-{k}]" for k, _ in VIEWS + [("custom", "")])
 LABS = [("on", "On", ""), ("off", "Off", "-nolabels")]
 TLS = [("on", "On"), ("off", "Off")]
 IMG_H = Image.open(f"{sys.argv[3]}/labels.png").size[1]  # map image height (depends on the grid)
@@ -243,6 +232,7 @@ lfoc = ",\n".join(f"#l-{l}:focus-visible ~ aside label[for=l-{l}]" for l, *_ in 
 tsel = ",\n".join(f"#tl-{l}:checked ~ aside label[for=tl-{l}]" for l, _ in TLS)
 tfoc = ",\n".join(f"#tl-{l}:focus-visible ~ aside label[for=tl-{l}]" for l, _ in TLS)
 inputs = "\n".join(f'<input type="radio" name="view" id="v-{k}"{" checked" if k == DEFAULT else ""}>' for k, _ in VIEWS)
+inputs += '\n<input type="radio" name="view" id="v-custom">'
 inputs += "\n" + "\n".join(f'<input type="radio" name="measure" id="ms-{ms}"{" checked" if ms == "rush" else ""}>' for ms, *_ in MEAS)
 inputs += "\n" + "\n".join(f'<input type="radio" name="labels" id="l-{l}"{" checked" if l == "on" else ""}>' for l, *_ in LABS)
 inputs += "\n" + "\n".join(f'<input type="radio" name="tlines" id="tl-{l}"{" checked" if l == "on" else ""}>' for l, _ in TLS)
@@ -262,6 +252,8 @@ for (k, n), (ms, mname, msuf) in ((v, m_) for v in VIEWS for m_ in MEAS):
     maps.append(f'<a class="m m-{k}-{ms}" href="{f}-big.png"><img src="{f}.png" srcset="{f}.png 1100w, {f}-big.png 2200w" '
                 f'sizes="(min-width: 800px) calc(100vw - 360px), 100vw" width="1100" height="{IMG_H}" alt="{alt}"'
                 f'{"" if (k == DEFAULT and ms == "rush") else " loading=\"lazy\""}>{lines_img(k.split("-")[-1])}{OVERLAY}</a>')
+CMP = json.load(open(f"{OUT}/cmp/meta.json"))
+JS = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "compare.js")).read()
 rows = "\n".join(f"<tr><td>{y}</td><td>{H[y]['rush']['summary']['jobs']:.1f}</td><td>{H[y]['summary']['jobs']:.1f}</td>"
                  f"<td>{SC[y]['bus']:,}</td><td>{SC[y]['rail_ferry']:,}</td></tr>" for y in YEARS)
 j10, j19, j26 = (H[y]["summary"]["jobs"] for y in ("2009", "2019", "2026"))
@@ -312,12 +304,17 @@ main {{ min-width: 0; min-height: 0; display: flex; align-items: center; justify
 #l-off:checked ~ main .lab {{ display: none; }}
 #tl-off:checked ~ main .lin {{ display: none; }}
 {show} {{ display: block; }}
+#cmpctl {{ display: none; }}
+#v-custom:checked ~ aside #cmpctl, #v-custom:checked ~ main .m-custom {{ display: block; }}
+.cmpsel {{ align-items: center; }}
+.cmpsel select {{ font: inherit; font-size: 15px; padding: 2px 4px; }}
+.m canvas {{ display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }}
 .m img {{ display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }}
 @media (max-width: 799px) {{
   .wrap {{ display: block; height: auto; }}
   aside {{ border-right: 0; border-bottom: 1px solid #ddd; padding: 16px; }}
   main {{ padding: 8px 0; display: block; }}
-  .m img {{ width: 100%; max-height: none; }}
+  .m img, .m canvas {{ width: 100%; max-height: none; }}
 }}
 </style>
 </head>
@@ -328,7 +325,10 @@ main {{ min-width: 0; min-height: 0; display: flex; align-items: center; justify
 <h1>Transit Service Quality, 2009–2026</h1>
 <p>The same calculation as the <a href="./">2026 map</a>, run on archived MBTA schedules from each November. By the schedule, the average resident's rush-hour commute to jobs was {r10:.1f} minutes in 2009, {r19:.1f} in 2019, and {r26:.1f} in 2026. Averaged over the whole weekday it went from {j10:.1f} to {j19:.1f} to {j26:.1f}: rush-hour service was cut more than service at other times.</p>
 <span class="name">Change</span>
-<div class="opts">{"".join(f'<label for="v-{k}">{n}</label>' for k, n in CHANGES)}</div>
+<div class="opts">{"".join(f'<label for="v-{k}">{n}</label>' for k, n in CHANGES)}<label for="v-custom" hidden>Pick years</label></div>
+<div id="cmpctl"><div class="opts cmpsel"><select id="cmpA" aria-label="From year">{"".join(f'<option{" selected" if y == "2019" else ""}>{y}</option>' for y in YEARS)}</select>
+<span>to</span><select id="cmpB" aria-label="To year">{"".join(f'<option{" selected" if y == "2023" else ""}>{y}</option>' for y in YEARS)}</select></div>
+<p class="small" id="cmpavg"></p></div>
 <span class="name">Measure</span>
 <div class="opts">{"".join(f'<label for="ms-{ms}">{n}</label>' for ms, n, _ in MEAS)}</div>
 <span class="name">Single year</span>
@@ -385,7 +385,9 @@ main {{ min-width: 0; min-height: 0; display: flex; align-items: center; justify
 </aside>
 <main>
 {chr(10).join(maps)}
+<div class="m m-custom"><canvas id="cmpc" width="{CMP["w"]}" height="{CMP["h"]}" role="img" aria-label="Map of Greater Boston colored by change between two chosen years"></canvas><img class="lin" id="cmplin" alt="">{OVERLAY}</div>
 </main>
+<script>{JS}</script>
 </div>
 </body>
 </html>

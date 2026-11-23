@@ -1,8 +1,10 @@
 """Characterize 2009->2026 change in the rush-hour jobs metric by place type.
-Usage: change_breakdown.py HIST_JSON GTFS_2009 GTFS_2026 OUT_JSON"""
+Usage: change_breakdown.py HIST_DIR GTFS_2009 GTFS_2026 OUT_JSON   (HIST_DIR: see histdata.py)"""
 import csv, json, math, os, sys
 import numpy as np
-H = json.load(open(sys.argv[1])); g09, g26, OUT = sys.argv[2:5]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import histdata  # noqa: E402
+HD = sys.argv[1]; H, _ = histdata.load(HD); g09, g26, OUT = sys.argv[2:5]
 G = json.load(open("intermediates/grid.json"))
 pop = np.array(G["pop"], float); cells = np.array(G["cells"]); r, c = cells // G["ncols"], cells % G["ncols"]
 lat = G["lat0"] + (r + .5) * G["dlat"]; lon = G["lon0"] + (c + .5) * G["dlon"]
@@ -21,7 +23,7 @@ def near(pts, m=800):
 rt09, rt26 = near(stations(g09, {"0", "1"})), near(stations(g26, {"0", "1"}))
 cr09 = near(stations(g09, {"2"}))
 cls = np.where(rt09, "rapid transit (2009)", np.where(rt26, "rapid transit added since", np.where(cr09, "commuter rail only", "bus only")))
-M = lambda y, k="rush": np.array(H[y]["rush"]["metrics"]["jobs"] if k == "rush" else H[y]["metrics"]["jobs"])
+M = lambda y, k="rush": histdata.cells(HD, y, len(cells))[k]
 out = {}
 for k in ("rush", "day"):
     a, b = M("2009", k), M("2026", k); d = b - a

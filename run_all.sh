@@ -40,11 +40,14 @@ for f in 20091106:20091117 20101119:20101123 20111117:20111122 20121031:20121120
 done
 step history routing
 $PY -I pipeline/hist.py $D $B/histwork intermediates $R   # caches finished years in histwork/hist.json
+# small per-year extract the pages read (intermediates/hist, ~9 MB at 100m; keep it: routing takes hours)
+$PY -I pipeline/hist_extract.py $B/histwork intermediates/hist
+$PY -I pipeline/hist_lines.py $D intermediates/hist   # each year's lines, drawn consistently across years
 # systemwide weekday trips per year (bus vs rail/ferry) and bus speeds, for the history page
 step history stats
 $PY -c "
 import json, os, re, subprocess, sys
-H = json.load(open('$B/histwork/hist.json')); out = {}
+H = json.load(open('intermediates/hist/hist.json')); out = {}
 feed = lambda r: '$D/hist/' + r['feed'] if r['feed'] else '$D/gtfs'
 for y, r in sorted(H.items()):
     s = subprocess.run([sys.executable, '-I', 'pipeline/trips_count.py', feed(r), r['date']], capture_output=True, text=True, check=True).stdout
@@ -73,7 +76,7 @@ fi
 
 # ---- History pages ----
 step history pages
-TQ_SITE=out/data $PY -I pipeline/hist_render.py $B/histwork/hist.json out/transitq2026
-$PY -I pipeline/change_breakdown.py $B/histwork/hist.json $D/hist/20091106-spliced $D/gtfs intermediates/change_breakdown.json
-$PY -I pipeline/hist_page.py $B/histwork/hist.json intermediates/service_counts.json out/transitq2026
+TQ_SITE=out/data $PY -I pipeline/hist_render.py intermediates/hist out/transitq2026
+$PY -I pipeline/change_breakdown.py intermediates/hist $D/hist/20091106-spliced $D/gtfs intermediates/change_breakdown.json
+$PY -I pipeline/hist_page.py intermediates/hist intermediates/service_counts.json out/transitq2026
 step all done

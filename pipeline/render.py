@@ -116,14 +116,16 @@ def cells_image(colors, alphas):
     return img
 
 
-def draw(img, line_list, title, subtitle, legend, out_base, labels=True):
-    """legend: dict(colors=[...], ticks=[(index, text)], right=str, caption=str)."""
+def draw(img, line_list, title, subtitle, legend, out_base, labels=True, water=True):
+    """legend: dict(colors=[...], ticks=[(index, text)], right=str, caption=str).
+    water=False leaves water out (for frames that get cells drawn in the browser, then water.png)."""
     fig = plt.figure(figsize=(MAP_W, FIG_H), dpi=200, facecolor="white")
     ax = fig.add_axes([0, FOOT / FIG_H, 1, MAP_H / FIG_H])
     ax.set_xlim(0, NCOL); ax.set_ylim(NR, 0); ax.axis("off")
     ax.add_patch(Rectangle((0, 0), NCOL, NR, facecolor=LAND, edgecolor="none", zorder=0))
     ax.imshow(img, extent=(0, NCOL, NR, 0), interpolation="nearest", zorder=1)
-    ax.add_patch(PathPatch(water_path, facecolor=WATER, edgecolor="none", zorder=2))
+    if water:
+        ax.add_patch(PathPatch(water_path, facecolor=WATER, edgecolor="none", zorder=2))
     halo = [patheffects.withStroke(linewidth=2, foreground=HALO)]
     for x, y, c, k in sorted(line_list, key=lambda t: ORDER[t[3]]):
         ax.plot(x, y, color=HALO, lw=WIDTH[k] + 1.1, solid_capstyle="round", solid_joinstyle="round", zorder=3)
@@ -158,13 +160,15 @@ def draw(img, line_list, title, subtitle, legend, out_base, labels=True):
     plt.close(fig)
 
 
-def overlay(out_base, line_list=(), labels=False):
+def overlay(out_base, line_list=(), labels=False, water=False):
     """Transit lines and/or place names alone on a transparent canvas laid out exactly
     like draw()'s map, so pages can stack it over any map and toggle it with CSS."""
     fig = plt.figure(figsize=(MAP_W, FIG_H), dpi=200)
     fig.patch.set_alpha(0)
     ax = fig.add_axes([0, FOOT / FIG_H, 1, MAP_H / FIG_H])
     ax.set_xlim(0, NCOL); ax.set_ylim(NR, 0); ax.axis("off"); ax.patch.set_alpha(0)
+    if water:
+        ax.add_patch(PathPatch(water_path, facecolor=WATER, edgecolor="none"))
     halo = [patheffects.withStroke(linewidth=2, foreground=HALO)]
     for x, y, c, k in sorted(line_list, key=lambda t: ORDER[t[3]]):
         ax.plot(x, y, color=HALO, lw=WIDTH[k] + 1.1, solid_capstyle="round", solid_joinstyle="round")
